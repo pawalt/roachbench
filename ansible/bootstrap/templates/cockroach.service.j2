@@ -1,0 +1,19 @@
+[Unit]
+Description=cockroach service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+User=root
+Environment=COCKROACH_DEV_LICENSE={{ roach_dev_license }}
+ExecStart=/usr/local/bin/cockroach start --cluster-name=benchcluster \
+        --logtostderr=WARNING --log-file-verbosity=WARNING \
+        --locality=region={{ group_names[0] }} \
+        --advertise-addr={{ inventory_hostname }} \
+        --insecure --max-sql-memory=4GB --join={{ groups['workers'] | join(',') }}
+
+[Install]
+WantedBy=multi-user.target

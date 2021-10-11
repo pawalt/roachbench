@@ -1,0 +1,31 @@
+new_thrashing/one/default/2: one node
+
+INSERT_START=0
+REMOTE_KEYLOCS=30000
+
+cockroach workload init ycsb --regions=us-east1,eu-west2,asia-northeast1,australia-southeast1 \
+> --insert-hash=false --insert-count=1000 --region-space=10000 --zero-padding=10 \
+> --rbr-col=default --region-placement=A \
+> "postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable"
+
+cockroach workload run ycsb --duration=10m --regions=us-east1,eu-west2,asia-northeast1,australia-southeast1 \
+> --request-distribution=uniform --families=false --insert-hash=false --zero-padding=10 \
+> --insert-start=$INSERT_START --insert-count=1000 --remote-keylocs=$REMOTE_KEYLOCS \
+> --rbr-col=default --region-placement=C \
+> "postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" > stats.txt
+
+new_thrashing/one/rehoming/2: one node
+
+INSERT_START=0
+REMOTE_KEYLOCS=30000
+
+cockroach workload init ycsb --regions=us-east1,eu-west2,asia-northeast1,australia-southeast1 \
+> --insert-hash=false --insert-count=1000 --region-space=10000 --zero-padding=10 \
+> --rbr-col=rehoming --region-placement=A \
+> "postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable"
+
+cockroach workload run ycsb --duration=10m --regions=us-east1,eu-west2,asia-northeast1,australia-southeast1 \
+> --request-distribution=uniform --families=false --insert-hash=false --zero-padding=10 \
+> --insert-start=$INSERT_START --insert-count=1000 --remote-keylocs=$REMOTE_KEYLOCS \
+> --rbr-col=rehoming --region-placement=C \
+> "postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" > stats.txt

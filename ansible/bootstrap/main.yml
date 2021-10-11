@@ -1,0 +1,36 @@
+---
+- hosts: observers
+  tasks:
+    - name: Copy over cockroach
+      become: yes
+      copy:
+        src: "{{ playbook_dir }}/cockroach"
+        dest: "/usr/local/bin/cockroach"
+        mode: 0755
+
+- hosts: workers
+  tasks:
+    - name: Copy over cockroach
+      become: yes
+      copy:
+        src: "{{ playbook_dir }}/cockroachprod"
+        dest: "/usr/local/bin/cockroach"
+        mode: 0755
+
+- hosts: workers
+  vars:
+    # from https://register.cockroachdb.com/api/prodtest
+    roach_dev_license: crl-0-EJvWj4sGGAIiI0NvY2tyb2FjaCBMYWJzIC0gUHJvZHVjdGlvbiBUZXN0aW5n
+
+  tasks:
+    - name: Template out service file
+      become: yes
+      ansible.builtin.template:
+        src: templates/cockroach.service.j2
+        dest: /etc/systemd/system/cockroach.service
+
+    - name: Enable cockroach
+      ansible.builtin.command: sudo systemctl enable cockroach
+
+    - name: Start cockroach
+      ansible.builtin.command: sudo systemctl restart cockroach

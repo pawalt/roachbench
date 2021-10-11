@@ -1,0 +1,225 @@
+Sorry for the bash.
+
+export NODE_IP=34.75.106.62
+
+cockroach init --insecure --cluster-name benchcluster --host $NODE_IP
+
+
+1. RUN ON ONE NODE BEFORE TEST -------------------------------------------------------------------------
+
+cockroach sql --url="postgresql://root@${NODE_IP}:26257/defaultdb?sslmode=disable" --execute="DROP DATABASE ycsb;"
+
+cockroach sql --url="postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" --execute="DROP TABLE usertable;"
+
+export COCKROACH_DEV_LICENSE=$(curl https://register.cockroachdb.com/api/prodtest)
+
+read -r -d '' ROACHCMD <<'EOF'
+SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
+SET CLUSTER SETTING enterprise.license = '${COCKROACH_DEV_LICENSE}';
+CREATE DATABASE ycsb;
+EOF
+
+export ROACHCMD=$(echo $ROACHCMD | envsubst)
+
+cockroach sql --url="postgresql://root@${NODE_IP}:26257/defaultdb?sslmode=disable" --execute="${ROACHCMD}"
+
+cockroach workload init ycsb --regions=us-east1,eu-west2,asia-northeast1 \
+--insert-hash=false --insert-count=1000 --region-space=1000000 --zero-padding=10 \
+--rbr-col=partitioned --region-placement=A \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable"
+
+
+read -r -d '' ROACHCMD <<'EOF'
+SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
+SET CLUSTER SETTING enterprise.license = '${COCKROACH_DEV_LICENSE}';
+CREATE DATABASE ycsb PRIMARY REGION "us-east1" REGIONS "eu-west2", "asia-northeast1";
+EOF
+
+
+
+
+
+
+
+2. RUN ON ALL NODES CONCURRENTLY ---------------------------------------------------------
+
+
+export INSERT_START=0
+export REMOTE_KEYLOCS=30000
+
+export INSERT_START=10000
+export REMOTE_KEYLOCS=30000
+
+export INSERT_START=20000
+export REMOTE_KEYLOCS=30000
+
+
+export REMOTE_KEYLOCS=30000
+
+
+export REMOTE_KEYLOCS=10950
+export REMOTE_KEYLOCS=20950
+export REMOTE_KEYLOCS=950
+
+cockroach workload run ycsb --duration=10m --regions=us-east1,eu-west2,asia-northeast1,australia-southeast1 \
+--request-distribution=uniform --families=false --insert-hash=false --zero-padding=10 \
+--insert-start=$INSERT_START --insert-count=1000 --remote-keylocs=$REMOTE_KEYLOCS \
+--rbr-col=default --region-placement=C \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" > stats.txt
+
+
+cockroach workload run ycsb --concurrency=2048 --duration=10m --regions=us-east1,eu-west2,asia-northeast1,australia-southeast1 \
+--request-distribution=uniform --families=false --insert-hash=false --zero-padding=10 \
+--insert-start=$INSERT_START --insert-count=950 --remote-keylocs=$REMOTE_KEYLOCS \
+--remote-region-size=50 \
+--rbr-col=default --region-placement=B \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" > stats.txt
+
+export INSERT_START=0
+export REMOTE_KEYLOCS=1500,2500
+
+
+export INSERT_START=0
+export REMOTE_KEYLOCS=1000000,2000000
+
+export INSERT_START=4000000
+export REMOTE_KEYLOCS=3000000,5000000
+
+export INSERT_START=8000000
+export REMOTE_KEYLOCS=6000000,7000000
+
+cockroach workload run ycsb --duration=10m --regions=us-east1,eu-west2,asia-northeast1 \
+--request-distribution=uniform --families=false --insert-hash=false --zero-padding=10 \
+--insert-start=$INSERT_START --insert-count=1000 --remote-keylocs=$REMOTE_KEYLOCS \
+--rbr-col=partitioned --region-placement=C --workload=D \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" > stats.txt
+
+2.5 SHIFTED WINDOW CMD -----------------------------------------------------------------
+
+export REMOTE_KEYLOCS=10000
+export REMOTE_KEYLOCS=50000
+export REMOTE_KEYLOCS=60000
+
+
+cockroach workload run ycsb --duration=10m --regions=us-east1,eu-west1,southamerica-east1 \
+--request-distribution=uniform --families=false --insert-hash=false --zero-padding=10 \
+--insert-start=$INSERT_START --insert-count=500 --remote-keylocs=$REMOTE_KEYLOCS \
+--rbr-col=default --region-placement=C \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" > stats.txt
+
+3. CLEANUP
+
+cockroach sql --url="postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" --execute="DROP TABLE usertable;"
+cockroach sql --url="postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable" --execute="DROP database ycsb;"
+
+
+locality of search:
+cockroach sql --url="postgresql://root@${NODE_IP}:26257/defaultdb?sslmode=disable" --execute="SET CLUSTER SETTING sql.defaults.locality_optimized_partitioned_index_scan.enabled = true;"
+
+lfg:
+root@127.162.89.104:26257/ycsb> select count(*), crdb_region from usertable group by crdb_region;
+  count |   crdb_region
+--------+-------------------
+   5064 | gcp-us-east1
+   2480 | gcp-europe-west1
+   2456 | gcp-us-west1
+
+
+
+
+
+
+
+RUNNING IN DEMO:
+
+
+./cockroach demo --insecure \
+ --empty \
+ --nodes=9 \
+ --demo-locality=region=us-east1:region=us-east1:region=us-east1:region=eu-west1:region=eu-west1:region=eu-west1:region=southamerica-east1:region=southamerica-east1:region=southamerica-east1
+
+
+export NODE_IP=127.106.78.81
+
+export COCKROACH_DEV_LICENSE=$(curl https://register.cockroachdb.com/api/prodtest)
+
+read -r -d '' ROACHCMD <<'EOF'
+SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
+SET CLUSTER SETTING enterprise.license = 'crl-0-EPuX14sGGAIiI0NvY2tyb2FjaCBMYWJzIC0gUHJvZHVjdGlvbiBUZXN0aW5n';
+CREATE DATABASE ycsb PRIMARY REGION "us-east1" REGIONS "eu-west1","southamerica-east1";
+EOF
+
+read -r -d '' ROACHCMD <<'EOF'
+SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';
+SET CLUSTER SETTING enterprise.license = 'crl-0-EPuX14sGGAIiI0NvY2tyb2FjaCBMYWJzIC0gUHJvZHVjdGlvbiBUZXN0aW5n';
+CREATE DATABASE ycsb;
+EOF
+
+./cockroach sql --url="postgresql://root@${NODE_IP}:26257/defaultdb?sslmode=disable" --execute="${ROACHCMD}"
+
+./cockroach workload init ycsb --region-placement=C --regions=us-east1,eu-west1,southamerica-east1 \
+--insert-hash=false --insert-count=5 --region-space=10 --rbr-col=partitioned \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable"
+
+
+./cockroach workload run ycsb --region-placement=C --duration=1m --regions=us-east1,eu-west1,southamerica-east1 \
+--request-distribution=uniform --rbr-col=partitioned \
+--insert-hash=false --insert-start=0 --insert-count=5 --rbr-col=default --remote-keylocs=10,20 \
+"postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable"
+
+root@35.196.196.237:26257/ycsb> show create table usertable;
+  table_name |                                                                create_statement
+-------------+--------------------------------------------------------------------------------------------------------------------------------------------------
+  usertable  | CREATE TABLE public.usertable (
+             |     ycsb_key VARCHAR(255) NOT NULL,
+             |     field0 STRING NOT NULL,
+             |     field1 STRING NOT NULL,
+             |     field2 STRING NOT NULL,
+             |     field3 STRING NOT NULL,
+             |     field4 STRING NOT NULL,
+             |     field5 STRING NOT NULL,
+             |     field6 STRING NOT NULL,
+             |     field7 STRING NOT NULL,
+             |     field8 STRING NOT NULL,
+             |     field9 STRING NOT NULL,
+             |     crdb_region public.crdb_internal_region NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+             |     CONSTRAINT usertable_pkey PRIMARY KEY (ycsb_key ASC),
+             |     FAMILY fam_0_ycsb_key_crdb_region (ycsb_key, crdb_region),
+             |     FAMILY fam_1_field0 (field0),
+             |     FAMILY fam_2_field1 (field1),
+             |     FAMILY fam_3_field2 (field2),
+             |     FAMILY fam_4_field3 (field3),
+             |     FAMILY fam_5_field4 (field4),
+             |     FAMILY fam_6_field5 (field5),
+             |     FAMILY fam_7_field6 (field6),
+             |     FAMILY fam_8_field7 (field7),
+             |     FAMILY fam_9_field8 (field8),
+             |     FAMILY fam_10_field9 (field9)
+             | ) LOCALITY REGIONAL BY ROW
+
+INSERT INTO usertable VALUES (
+			'user0000002002', '', '', '', '', '', '', '', '', '', ''
+		);
+
+create table test (p int primary key) locality regional by row;
+
+explain insert into test VALUES (103);
+
+cockroach workload init ycsb --regions=us-east1,eu-west2,asia-northeast1 \
+> --insert-hash=false --insert-count=1000 --region-space=1000000 --zero-padding=10 \
+> --rbr-col=partitioned --region-placement=A \
+> "postgresql://root@${NODE_IP}:26257/ycsb?sslmode=disable"
+(
+		ycsb_key VARCHAR(255) PRIMARY KEY NOT NULL,
+		FIELD0 TEXT NOT NULL,
+		FIELD1 TEXT NOT NULL,
+		FIELD2 TEXT NOT NULL,
+		FIELD3 TEXT NOT NULL,
+		FIELD4 TEXT NOT NULL,
+		FIELD5 TEXT NOT NULL,
+		FIELD6 TEXT NOT NULL,
+		FIELD7 TEXT NOT NULL,
+		FIELD8 TEXT NOT NULL,
+		FIELD9 TEXT NOT NULL
+
+	)PARTITION BY RANGE (ycsb_key) (PARTITION "us-east1-0" VALUES FROM ('user0000000000') TO ('user0000999999'),PARTITION "eu-west2-0" VALUES FROM ('user0001000000') TO ('user0001999999'),PARTITION "asia-northeast1-0" VALUES FROM ('user0002000000') TO ('user0002999999'),PARTITION "us-east1-1" VALUES FROM ('user0003000000') TO ('user0003999999'),PARTITION "eu-west2-1" VALUES FROM ('user0004000000') TO ('user0004999999'),PARTITION "asia-northeast1-1" VALUES FROM ('user0005000000') TO ('user0005999999'),PARTITION "us-east1-2" VALUES FROM ('user0006000000') TO ('user0006999999'),PARTITION "eu-west2-2" VALUES FROM ('user0007000000') TO ('user0007999999'),PARTITION "asia-northeast1-2" VALUES FROM ('user0008000000') TO ('user0008999999'))
